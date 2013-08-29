@@ -1,0 +1,155 @@
+from selenium import webdriver
+from urllib import urlencode
+from glob import glob
+import argparse
+import sys
+import os
+import httplib
+import time
+import json
+import tarfile
+
+HARSTORAGE_HOST = 'localhost'
+HARSTORAGE_PORT = '5000'
+
+class HttpRequest():
+    def __init__(self, hostname, port):
+        self.hostname = hostname
+        self.port = port
+
+    def send(self, method, path, body=None, headers=None):
+        connection = httplib.HTTPConnection(self.hostname, self.port)
+
+        if body is not None and headers is not None:
+            connection.request(method, path, body, headers)
+        else:
+            connection.request(method, path)
+
+        response = connection.getresponse().read()
+        connection.close()
+
+        return response
+
+class HarStorage():
+    def __init__(self, host, port):
+        self.http_request = HttpRequest(host, port)
+
+    def save(self, har):
+        path = "/results/upload"
+        headers = {"Content-type": "application/x-www-form-urlencoded",
+                   "Automated": "true"}
+        body = urlencode({"file": har})
+        return self.http_request.send("POST", path, body, headers)
+
+class Firefox():
+    def __init__(self,  log_dirpath, firebug_path, netexport_path,
+                 disable_browser_caching=True):
+        self.profile = webdriver.FirefoxProfile()
+        self.log_dirpath = log_dirpath
+
+        domain = "extensions.firebug."
+        self.profile.set_preference(domain+"currentVersion", "1.11.2")
+        self.profile.set_preference(domain+"allPagesActivation", "on")
+        self.profile.set_preference(domain+"defaultPanelName", "net")
+        self.profile.set_preference(domain+"net.enableSites", True)
+        self.profile.set_preference(domain+"netexport.alwaysEnableAutoExport", True)
+        self.profile.set_preference(domain+"netexport.showPreview", False)
+        self.profile.set_preference(domain+"netexport.defaultLogDir", self.log_dirpath)
+        self.profile.set_preference("browser.cache.disk.enable",
+                                    not disable_browser_caching);
+        self.profile.set_preference("browser.cache.memory.enable",
+                                    not disable_browser_caching);
+        self.profile.set_preference("browser.cache.offline.enable",
+                                    not disable_browser_caching);
+        self.profile.set_preference("network.http.use-cache",
+                                    not disable_browser_caching);
+
+        self.profile.add_extension(extension=firebug_path)
+        self.profile.add_extension(extension=netexport_path)
+
+    def launch(self):
+        self.driver = webdriver.Firefox(firefox_profile = self.profile)
+
+def read_page_urls(filename):
+    urls_fp = open(filename)
+    urls = [line.rstrip('\n') for line in urls_fp if line]
+    urls_fp.close()
+    return urls
+
+
+def send_har_files(harstorage, filenames, label=None):
+    print 'Sending all HAR files in the current directory'
+    for filename in filenames:
+        har_fp = open(filename, 'r')
+        har = json.load(har_fp)
+        har_fp.close()
+        page_label = har['log']['entries'][0]['request']['url']
+
+        if label:
+            har['log']['pages'][0]['id'] = label
+
+        sys.stdout.write('Sending results for %s .... ' % page_label)
+        sys.stdout.write(harstorage.save(json.dumps(har)))
+        print
+
+def main(args):
+    uiperf_dirname = os.path.dirname(__file__)
+
+    firebug_path = os.path.join(uiperf_dirname, 'lib', 'firebug-1.11.2.xpi')
+    netexport_path = os.path.join(uiperf_dirname, 'lib', 'netExport-0.9b3.xpi')
+    ff = Firefox(os.getcwd(), firebug_path, netexport_path,
+                 args.disable_browser_caching)
+
+    old_hars = glob(os.path.join(os.getcwd(), '*.har'))
+    if old_hars:
+        old_har_filename = os.path.basename(os.path.splitext(old_hars[0])[0])
+        old_hars_tar_file = tarfile.open("old_hars_%s.tar.gz" % old_har_filename,
+                                         "w:gz")
+        for name in old_hars:
+            old_hars_tar_file.add(name)
+            os.remove(name)
+        old_hars_tar_file.close()
+
+
+    print 'Launching Firefox...'
+    ff.launch()
+    time.sleep(5)
+    print 'Firefox finished loading.'
+
+    print 'Reading page links from file'
+    if os.path.isfile(args.urls_file):
+        pages = read_page_urls(args.urls_file)
+    else:
+        print 'File not found'
+        exit
+
+    for page in pages:
+        if page != '':
+            print 'Loading page %s' % page
+            for _ in xrange(0, args.num_samples):
+                ff.driver.get(page)
+                time.sleep(10)
+
+    ff.driver.quit()
+
+    if args.harstorage:
+        harstorage_connection = args.harstorage.split(':')
+        HARSTORAGE_HOST = harstorage_connection[0]
+        HARSTORAGE_PORT = harstorage_connection[1]
+
+        filenames = glob(os.path.join(os.getcwd(), '*.har'))
+
+        harstorage = HarStorage(HARSTORAGE_HOST, HARSTORAGE_PORT)
+        send_har_files(harstorage, filenames, args.testname)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Run Frontend Performance test')
+    parser.add_argument("urls_file", help="File contains one URL per line")
+    parser.add_argument("-H", "--harstorage", metavar="<hostname>:<port>",
+                        help="Sends HAR files to HAR Storage server e.g. 127.0.0.1:5000")
+    parser.add_argument("-t", "--testname")
+    parser.add_argument("-n", "--num_samples", type=int, default=1)
+    parser.add_argument("--disable_browser_caching", action='store_true',
+                        default=False)
+    args = parser.parse_args()
+    main(args)

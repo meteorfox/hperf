@@ -1,0 +1,73 @@
+{
+  "benchmark": {
+    "name": "System Console Frontend Benchmark",
+    "comment": "",
+    "version": "1.0",
+    "creator": {
+      "name": "HPerf Benchmark Generator",
+      "version": "1.0",
+      "comment": "Beta"
+    },
+    "browser": {
+      "name": "chrome",
+      "version": "29.0",
+      "comment": "",
+      "options": {
+        "applicationCache": true,
+        "userAgent": ""
+      }
+    },
+    "beacon": {},
+    "environment": {
+      "baseURL": "https://172.18.48.32"
+    },
+    "pages": [
+      {
+        "urlPath": "/",
+        "webElements": [
+          {
+            "by": [
+              "ID",
+              "zeroUserName"
+            ],
+            "value": "admin",
+            "commands": [
+              "SEND_KEYS"
+            ]
+          },
+          {
+            "by": [
+              "ID",
+              "zeroPassword"
+            ],
+            "value": "vnextperf",
+            "commands": [
+              "SEND_KEYS",
+              "SUBMIT"
+            ]
+          }
+        ],
+        "samples": 1
+      },
+      {
+        "baseURL": "https://172.18.96.32",
+        "urlPath": "/systemconsole/welcome/"
+      },
+      {
+        "urlPath": "/systemconsole/cloud/ip-groups/"
+      },
+      {
+        "urlPath": "/systemconsole/cloud/cloud-groups/"
+      },
+      {
+        "urlPath": "/systemconsole/cloud/images/"
+      },
+      {
+        "urlPath": "/systemconsole/cloud/virtual-machines/"
+      },
+      {
+        "urlPath": "/systemconsole/cloud/vm-groups/"
+      }
+    ]
+  }
+}
