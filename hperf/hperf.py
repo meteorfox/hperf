@@ -2,7 +2,7 @@
 # encoding: utf-8
 '''
 hperf -- Simple CLI to measure the performance of your web page.
-@author:     cltorres@us.ibm.com
+@author:     cltorres
 '''
 import sys
 import browser
